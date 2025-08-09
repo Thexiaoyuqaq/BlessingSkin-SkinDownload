@@ -2,6 +2,7 @@
 
 一个用于批量爬取 [BlessingSkin](https://skin.prinzeugen.net/) 皮肤数据并下载对应材质图片的 Python 爬虫工具。
 注： littleskin同样使用了BlessingSkin框架，也可以使用，只需在main.py更换域名地址
+注： main.py使用的是littleskin的地址，如需BlessingSkin，请自行更换
 
 ## ✨ 特性
 
