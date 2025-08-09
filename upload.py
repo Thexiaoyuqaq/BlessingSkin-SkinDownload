@@ -27,7 +27,7 @@ print_lock = Lock()
 def setup_logging():
     """设置日志"""
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.INFO,  
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler('upload.log', encoding='utf-8'),
@@ -50,9 +50,11 @@ def scan_image_files():
         logger.error(f"图片文件夹不存在: {IMGS_FOLDER}")
         return []
     
+    
     for subfolder in ['skins', 'capes', 'others']:
         subfolder_path = imgs_path / subfolder
         if subfolder_path.exists():
+            
             png_files = list(subfolder_path.glob('*.png'))
             image_files.extend(png_files)
             logger.info(f"在 {subfolder} 文件夹中找到 {len(png_files)} 个PNG文件")
@@ -71,7 +73,10 @@ def parse_filename_for_upload(filepath):
         tuple: (新文件名, 皮肤类型) 或 (None, None) 如果无法解析
     """
     filename = filepath.stem  
+    
+    
     folder_name = filepath.parent.name
+    
     
     if '_steve' in filename.lower():
         skin_name = filename.lower().replace('_steve', '')
@@ -80,12 +85,16 @@ def parse_filename_for_upload(filepath):
         skin_name = filename.lower().replace('_alex', '')
         skin_type = 'alex'
     else:
+        
         if folder_name == 'capes':
+            
             logger.warning(f"跳过披风文件: {filename}")
             return None, None
         else:
+            
             skin_name = filename
             skin_type = 'steve'
+    
     
     skin_name = "".join(c for c in skin_name if c.isalnum() or c in "_-")
     if not skin_name:
@@ -112,11 +121,13 @@ def upload_single_file(filepath):
     }
     
     try:
+        
         new_filename, skin_type = parse_filename_for_upload(filepath)
         
         if not new_filename:
             result['error'] = '无法解析文件名或不支持的文件类型'
             return result
+        
         
         if not filepath.exists():
             result['error'] = '文件不存在'
@@ -125,6 +136,7 @@ def upload_single_file(filepath):
         if filepath.suffix.lower() != '.png':
             result['error'] = '不是PNG文件'
             return result
+        
         
         file_size = filepath.stat().st_size
         if file_size > 5 * 1024 * 1024:
@@ -135,9 +147,11 @@ def upload_single_file(filepath):
             result['error'] = '文件为空'
             return result
         
+        
         for attempt in range(RETRY_COUNT):
             try:
                 with open(filepath, 'rb') as f:
+                    
                     files = {
                         'images': (new_filename, f, 'image/png')
                     }
@@ -145,6 +159,9 @@ def upload_single_file(filepath):
                     headers = {
                         'User-Agent': 'Python Batch Uploader 1.0'
                     }
+                    
+                    
+                    logger.debug(f"尝试上传: {filepath.name} -> {new_filename}")
                     
                     response = requests.post(
                         UPLOAD_API_URL,
@@ -165,18 +182,28 @@ def upload_single_file(filepath):
                             else:
                                 result['error'] = response_data.get('message', '上传失败')
                                 
+                                if 'data' in response_data and 'results' in response_data['data']:
+                                    for file_result in response_data['data']['results']:
+                                        if not file_result.get('success') and file_result.get('error'):
+                                            logger.warning(f"文件 {file_result.get('filename')} 失败: {file_result.get('error')}")
+                                
                         except json.JSONDecodeError:
                             result['error'] = f'服务器响应格式错误: {response.text[:200]}'
+                            logger.error(f"JSON解析失败，响应内容: {response.text}")
                     else:
                         result['error'] = f'HTTP错误: {response.status_code}'
-                    break
+                        logger.error(f"HTTP错误 {response.status_code}: {response.text[:500]}")
+                        
+                    break  
                     
             except requests.exceptions.RequestException as e:
                 logger.warning(f"上传 {filepath.name} 失败 (尝试 {attempt + 1}/{RETRY_COUNT}): {e}")
                 if attempt < RETRY_COUNT - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2 ** attempt)  
                 else:
                     result['error'] = f'网络请求失败: {str(e)}'
+        
+        
         time.sleep(REQUEST_DELAY)
         
     except Exception as e:
@@ -205,6 +232,7 @@ def upload_batch_files(file_list):
     try:
         files_data = []
         
+        
         for filepath in file_list:
             new_filename, skin_type = parse_filename_for_upload(filepath)
             
@@ -220,15 +248,18 @@ def upload_batch_files(file_list):
             result['error'] = '没有有效的文件可上传'
             return result
         
+        
         for attempt in range(RETRY_COUNT):
             try:
-                files = {}
+                files = []
                 opened_files = []
                 
-                for i, (filepath, new_filename) in enumerate(files_data):
+                
+                for filepath, new_filename in files_data:
                     f = open(filepath, 'rb')
                     opened_files.append(f)
-                    files[f'images[{i}]'] = (new_filename, f, 'image/png')
+                    
+                    files.append(('images[]', (new_filename, f, 'image/png')))
                 
                 try:
                     headers = {
@@ -253,15 +284,22 @@ def upload_batch_files(file_list):
                                     logger.info(f"批量上传成功: {len(files_data)} 个文件")
                             else:
                                 result['error'] = response_data.get('message', '批量上传失败')
+                                
+                                if 'data' in response_data and 'results' in response_data['data']:
+                                    for file_result in response_data['data']['results']:
+                                        if not file_result.get('success'):
+                                            logger.debug(f"文件失败: {file_result.get('filename')} - {file_result.get('error')}")
                         except json.JSONDecodeError:
                             result['error'] = f'服务器响应格式错误: {response.text[:200]}'
                     else:
-                        result['error'] = f'HTTP错误: {response.status_code}'
+                        result['error'] = f'HTTP错误: {response.status_code} - {response.text[:200]}'
                         
                 finally:
+                    
                     for f in opened_files:
                         f.close()
-                break 
+                
+                break  
                 
             except requests.exceptions.RequestException as e:
                 logger.warning(f"批量上传失败 (尝试 {attempt + 1}/{RETRY_COUNT}): {e}")
@@ -290,10 +328,12 @@ def process_files_single(image_files):
     
     try:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            
             future_to_file = {
                 executor.submit(upload_single_file, filepath): filepath 
                 for filepath in image_files
             }
+            
             
             for future in as_completed(future_to_file):
                 filepath = future_to_file[future]
@@ -309,6 +349,7 @@ def process_files_single(image_files):
                         if result.get('error'):
                             logger.debug(f"{filepath.name}: {result['error']}")
                     
+                    
                     progress = (processed_count / total_count) * 100
                     with print_lock:
                         print(f"进度: {processed_count}/{total_count} ({progress:.1f}%) - "
@@ -319,7 +360,7 @@ def process_files_single(image_files):
                     logger.error(f"{filepath.name} 处理异常: {e}")
     
     except KeyboardInterrupt:
-        print(f"\n\n上传被中断")
+        print(f"\n\n上传被用户中断")
         print(f"已处理: {processed_count}/{total_count}")
     
     return success_count, failed_count, processed_count
@@ -335,6 +376,7 @@ def process_files_batch(image_files):
     print("-" * 50)
     
     try:
+        
         batches = [image_files[i:i+BATCH_SIZE] for i in range(0, len(image_files), BATCH_SIZE)]
         
         for batch_num, batch_files in enumerate(batches, 1):
@@ -352,6 +394,7 @@ def process_files_batch(image_files):
             failed_count += batch_failed
             processed_count += len(batch_files)
             
+            
             progress = (processed_count / total_count) * 100
             print(f"批次 {batch_num}/{len(batches)} - 进度: {processed_count}/{total_count} "
                   f"({progress:.1f}%) - 成功: {success_count}, 失败: {failed_count}")
@@ -362,7 +405,6 @@ def process_files_batch(image_files):
     
     return success_count, failed_count, processed_count
 
-
 def main():
     """主函数"""
     global logger, UPLOAD_API_URL
@@ -371,6 +413,7 @@ def main():
     print("皮肤图片批量上传脚本")
     print("=" * 50)
     
+    
     image_files = scan_image_files()
     
     if not image_files:
@@ -378,6 +421,7 @@ def main():
         return
     
     print(f"找到 {len(image_files)} 个图片文件")
+    
     
     print("\n请选择上传模式:")
     print("1. 单文件上传（推荐，更稳定）")
@@ -389,6 +433,7 @@ def main():
         if mode not in ['1', '2']:
             print("无效选择，使用默认单文件上传模式")
             mode = '1'
+        
         
         print(f"\nAPI地址: {UPLOAD_API_URL}")
         confirm_api = input("API地址是否正确？(y/N): ").lower()
@@ -406,6 +451,7 @@ def main():
         print("\n操作已取消")
         return
     
+    
     start_time = time.time()
     
     if mode == '1':
@@ -415,6 +461,7 @@ def main():
     
     end_time = time.time()
     elapsed_time = end_time - start_time
+    
     
     print(f"\n\n上传完成!")
     print("=" * 50)
