@@ -1,0 +1,2 @@
+# BlessingSkin-SkinDownload
+批量化爬取来自BlessingSkin的皮肤
