@@ -362,9 +362,10 @@ def process_files_batch(image_files):
     
     return success_count, failed_count, processed_count
 
+
 def main():
     """主函数"""
-    global logger
+    global logger, UPLOAD_API_URL
     logger = setup_logging()
     
     print("皮肤图片批量上传脚本")
@@ -389,13 +390,12 @@ def main():
             print("无效选择，使用默认单文件上传模式")
             mode = '1'
         
-        current_api_url = UPLOAD_API_URL
-        print(f"\nAPI地址: {current_api_url}")
+        print(f"\nAPI地址: {UPLOAD_API_URL}")
         confirm_api = input("API地址是否正确？(y/N): ").lower()
         if confirm_api not in ['y', 'yes']:
             new_api = input("请输入正确的API地址: ").strip()
             if new_api:
-                current_api_url = new_api
+                UPLOAD_API_URL = new_api
         
         confirm = input(f"\n确认开始上传 {len(image_files)} 个文件？(y/N): ").lower()
         if confirm not in ['y', 'yes']:
@@ -407,10 +407,6 @@ def main():
         return
     
     start_time = time.time()
-    
-    if 'current_api_url' in locals():
-        global UPLOAD_API_URL
-        UPLOAD_API_URL = current_api_url
     
     if mode == '1':
         success_count, failed_count, processed_count = process_files_single(image_files)
