@@ -6,7 +6,6 @@
 """
 
 import requests
-import os
 import json
 import sys
 import time
@@ -14,7 +13,6 @@ import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
-import mimetypes
 
 # 配置
 UPLOAD_API_URL = "http://your-domain.com/upload-img.php"  # 请修改为实际的API地址
@@ -27,6 +25,7 @@ BATCH_SIZE = 5  # 每批上传的文件数量
 print_lock = Lock()
 
 def setup_logging():
+    """设置日志"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -71,7 +70,7 @@ def parse_filename_for_upload(filepath):
     Returns:
         tuple: (新文件名, 皮肤类型) 或 (None, None) 如果无法解析
     """
-    filename = filepath.stem 
+    filename = filepath.stem  
     folder_name = filepath.parent.name
     
     if '_steve' in filename.lower():
@@ -170,16 +169,14 @@ def upload_single_file(filepath):
                             result['error'] = f'服务器响应格式错误: {response.text[:200]}'
                     else:
                         result['error'] = f'HTTP错误: {response.status_code}'
-                        
-                    break 
+                    break
                     
             except requests.exceptions.RequestException as e:
                 logger.warning(f"上传 {filepath.name} 失败 (尝试 {attempt + 1}/{RETRY_COUNT}): {e}")
                 if attempt < RETRY_COUNT - 1:
-                    time.sleep(2 ** attempt) 
+                    time.sleep(2 ** attempt)
                 else:
                     result['error'] = f'网络请求失败: {str(e)}'
-        
         time.sleep(REQUEST_DELAY)
         
     except Exception as e:
@@ -264,7 +261,6 @@ def upload_batch_files(file_list):
                 finally:
                     for f in opened_files:
                         f.close()
-                
                 break 
                 
             except requests.exceptions.RequestException as e:
@@ -323,7 +319,7 @@ def process_files_single(image_files):
                     logger.error(f"{filepath.name} 处理异常: {e}")
     
     except KeyboardInterrupt:
-        print(f"\n\n上传被用户中断")
+        print(f"\n\n上传被中断")
         print(f"已处理: {processed_count}/{total_count}")
     
     return success_count, failed_count, processed_count
@@ -393,13 +389,13 @@ def main():
             print("无效选择，使用默认单文件上传模式")
             mode = '1'
         
-        print(f"\nAPI地址: {UPLOAD_API_URL}")
+        current_api_url = UPLOAD_API_URL
+        print(f"\nAPI地址: {current_api_url}")
         confirm_api = input("API地址是否正确？(y/N): ").lower()
         if confirm_api not in ['y', 'yes']:
             new_api = input("请输入正确的API地址: ").strip()
             if new_api:
-                global UPLOAD_API_URL
-                UPLOAD_API_URL = new_api
+                current_api_url = new_api
         
         confirm = input(f"\n确认开始上传 {len(image_files)} 个文件？(y/N): ").lower()
         if confirm not in ['y', 'yes']:
@@ -411,6 +407,10 @@ def main():
         return
     
     start_time = time.time()
+    
+    if 'current_api_url' in locals():
+        global UPLOAD_API_URL
+        UPLOAD_API_URL = current_api_url
     
     if mode == '1':
         success_count, failed_count, processed_count = process_files_single(image_files)
